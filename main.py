@@ -1,35 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from skimage import color, io
+import cv2
 
-def hue_sort(image, mask=None):
-    hue = color.rgb2hsv(image/255.)[:,:,0]
-    hue_sorted_hsv = hue[np.argsort(hue)]
-    hue_sorted_rgb = np.clip(color.hsv2rgb(hue_sorted_hsv)*255, 0, 255)
-
-    return hue_sorted_rgb
-
-def luminance_sort(image, mask):
-    luminance = color.rgb2hsv(image/255.)[:,:,2]
-    # print(color.rgb2hsv(image).shape)
-
-    sorted_indices = np.argsort(luminance, axis=1)
-    masked_luminance = np.where(mask, luminance, np.inf)
-    sorted_luminance = np.take_along_axis(masked_luminance, sorted_indices, axis=1)
-
-    return sorted_luminance
-
-def saturation_sort(image, mask=None):
-    saturation = color.rgb2hsv(image/255.)[:,:,1]
-
-    saturation_sorted_indices = np.argsort(saturation)
-    saturation_sorted_rgb = image[saturation_sorted_indices]
-
-    return saturation_sorted_rgb
-
-def pixel_sort(image, mask, sort_property="HUE", axis=1):
-
-    mask = mask.astype(bool)
+def pixel_sort(image, mask, sort_property="HUE"):
 
     hsv = 0
     if sort_property == "HUE":
@@ -42,46 +16,66 @@ def pixel_sort(image, mask, sort_property="HUE", axis=1):
     x = color.rgb2hsv(image/255.)[:,:,hsv]
     # print(color.rgb2hsv(image).shape)
 
-    masked_image = np.ma.masked_where(~mask, x)
-    sorted_indices = np.argsort(masked_image, axis)
-    # sorted_mask = np.take_along_axis(masked_image, sorted_indices, axis)
+    masked_image = np.ma.masked_where(~mask.astype(bool), x)
+    sorted_indices = np.argsort(masked_image, axis=1)
+    # sorted_mask = np.take_along_axis(masked_image, sorted_indices, axis=1)
 
     pixel_sorted_image = np.copy(image)
     pixel_sorted_image[masked_image.mask] = 0
+    WIDTH, _, CHANNELS = image.shape
 
-    for i in range(masked_image.shape[0]):
-        pixel_sorted_image[i, masked_image.mask[i]] = np.take_along_axis(image[i], sorted_indices[i], axis=0)
+    for channel in range(CHANNELS):
+        for i in range(WIDTH):
+            pixel_sorted_image[i,:,channel] = np.take_along_axis(image[i,:,channel], sorted_indices[i], axis=0)
+
 
     return pixel_sorted_image
 
 
-def threshhold_mask(image):
-    mask = image > 128
+def threshhold_mask(image, threshhold):
+    mask = threshhold > 128
 
     threshholded_image = np.zeros_like(image)
     threshholded_image[mask] = 255
 
     return color.rgb2gray(threshholded_image)
 
+def contour_mask(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    _, thresh = cv2.threshold(gray, 127, 255, 0)
+    contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    mask = np.zeros_like(gray)
+    mask = cv2.drawContours(mask,contours, -1, (255,0,255), 3)
+    contoured_image = cv2.drawContours(image,contours, -1, (255,0,255), 3)
+
+    return mask, contoured_image
+
 def main():
     image = plt.imread("../images/david.jpg")
-    mask = threshhold_mask(image)
+    mask_t = threshhold_mask(np.copy(image), 150)
+    mask_c, contours = contour_mask(np.copy(image))
 
-    plt.imshow(mask,cmap='gray')
-    plt.show()
-    WIDTH, HEIGHT, CHANNELS = image.shape
-
-    hue_sorted_image = np.zeros_like(image)
-    luminance_sorted_image = np.zeros_like(image)
-    saturation_sorted_image = np.zeros_like(image)
-
-
-
-    hue_sorted_image = pixel_sort(image, mask, "HUE")
-    luminance_sorted_image = pixel_sort(image, mask, "VAL")
-    saturation_sorted_image = pixel_sort(image, mask, "SAT")
+    hue_sorted_image_contour = pixel_sort(image, mask_c, "HUE")
+    luminance_sorted_image_contour = pixel_sort(image, mask_c, "VAL")
+    saturation_sorted_image_contour = pixel_sort(image, mask_c, "SAT")
+    
+    hue_sorted_image_threshhold = pixel_sort(image, mask_t, "HUE")
+    luminance_sorted_image_threshhold = pixel_sort(image, mask_t, "VAL")
+    saturation_sorted_image_threshhold = pixel_sort(image, mask_t, "SAT")
         
-    io.imshow_collection([image, hue_sorted_image, luminance_sorted_image, saturation_sorted_image])
+    io.imshow_collection([contours,
+                          mask_t,
+                          np.bitwise_and(hue_sorted_image_contour,image),
+                          np.bitwise_and(luminance_sorted_image_contour,image),
+                          np.bitwise_and(saturation_sorted_image_contour,image),
+
+                          np.bitwise_and(hue_sorted_image_threshhold,image),
+                          np.bitwise_and(luminance_sorted_image_threshhold,image),
+                          np.bitwise_and(saturation_sorted_image_threshhold,image)
+                         ])
+
     io.show()
 
 if __name__ == "__main__":
