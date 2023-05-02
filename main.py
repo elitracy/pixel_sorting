@@ -14,23 +14,20 @@ def pixel_sort(image, mask, sort_property="HUE"):
         hsv = 2
 
     x = color.rgb2hsv(image/255.)[:,:,hsv]
-    # print(color.rgb2hsv(image).shape)
 
     masked_image = np.ma.masked_where(~mask.astype(bool), x)
     sorted_indices = np.argsort(masked_image, axis=1)
-    # sorted_mask = np.take_along_axis(masked_image, sorted_indices, axis=1)
 
     pixel_sorted_image = np.copy(image)
     pixel_sorted_image[masked_image.mask] = 0
+
     WIDTH, _, CHANNELS = image.shape
 
     for channel in range(CHANNELS):
         for i in range(WIDTH):
             pixel_sorted_image[i,:,channel] = np.take_along_axis(image[i,:,channel], sorted_indices[i], axis=0)
 
-
     return pixel_sorted_image
-
 
 def threshhold_mask(image, threshhold):
     mask = threshhold > 128
@@ -43,18 +40,18 @@ def threshhold_mask(image, threshhold):
 def contour_mask(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    _, thresh = cv2.threshold(gray, 127, 255, 0)
-    contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    _, thresh = cv2.threshold(gray, 128, 255, 0)
+    contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
 
     mask = np.zeros_like(gray)
-    mask = cv2.drawContours(mask,contours, -1, (255,0,255), 3)
-    contoured_image = cv2.drawContours(image,contours, -1, (255,0,255), 3)
+    mask = cv2.drawContours(mask,contours, -1, (255), 10) 
+    contoured_image = cv2.drawContours(image,contours, -1, (255), 10)
 
     return mask, contoured_image
 
 def main():
     image = plt.imread("../images/david.jpg")
-    mask_t = threshhold_mask(np.copy(image), 150)
+    mask_t = threshhold_mask(np.copy(image), 200)
     mask_c, contours = contour_mask(np.copy(image))
 
     hue_sorted_image_contour = pixel_sort(image, mask_c, "HUE")
@@ -67,15 +64,15 @@ def main():
         
     io.imshow_collection([contours,
                           mask_t,
-                          np.bitwise_and(hue_sorted_image_contour,image),
-                          np.bitwise_and(luminance_sorted_image_contour,image),
-                          np.bitwise_and(saturation_sorted_image_contour,image),
+                          np.clip(np.bitwise_and(hue_sorted_image_contour,image),0,255),
+                          np.clip(np.bitwise_and(luminance_sorted_image_contour,image),0,255),
+                          np.clip(np.bitwise_and(saturation_sorted_image_contour,image),0,255),
 
-                          np.bitwise_and(hue_sorted_image_threshhold,image),
-                          np.bitwise_and(luminance_sorted_image_threshhold,image),
-                          np.bitwise_and(saturation_sorted_image_threshhold,image)
+
+                          np.clip(np.bitwise_and(hue_sorted_image_threshhold,image),0,255),
+                          np.clip(np.bitwise_and(luminance_sorted_image_threshhold,image),0,255),
+                          np.clip(np.bitwise_and(saturation_sorted_image_threshhold,image),0,255)
                          ])
-
     io.show()
 
 if __name__ == "__main__":
