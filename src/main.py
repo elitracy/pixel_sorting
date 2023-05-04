@@ -16,30 +16,47 @@ def pixel_sort(image, mask, sort_property="HUE"):
         case _:
             hsv = 0
 
-    x = color.rgb2hsv(image/255.)[:,:,hsv] # index either hue saturation or value channel
+    x = color.rgb2hsv(image)[:,:,hsv] # index either hue saturation or value channel
     mask = mask.astype(bool)
 
-    masked_image = np.ma.masked_where(~mask, x)
-    sorted_indices = np.argsort(masked_image, axis=1)
-
+    masked_image = np.ma.masked_where(mask, x)
     pixel_sorted_image = np.copy(image)
-    pixel_sorted_image[masked_image.mask] = 0
+
 
     WIDTH, _, CHANNELS = image.shape
 
     for channel in range(CHANNELS):
         for i in range(WIDTH):
-            pixel_sorted_image[i,:,channel] = np.take_along_axis(image[i,:,channel], sorted_indices[i], axis=0)
+            # find sort masked regions
+            sorted_row_mask_indices = np.sort(np.where(masked_image.mask[i]))[0]
+
+            if sorted_row_mask_indices.size > 1:
+
+
+                # get original masked image pixels
+                row = pixel_sorted_image[i,:,channel] 
+
+                sorted_pixels = row[sorted_row_mask_indices]
+
+                # print(sorted_row_mask_indices, sorted_pixels, sorted_pixels.size)
+                strip_start = sorted_row_mask_indices[0]
+                strip_length = sorted_row_mask_indices.size
+                strip_end = strip_start+strip_length
+
+
+                # sort the masked region of the image by the indices of the sorted mask 
+                # sorted_masked_row = np.take_along_axis(row[strip_start:strip_end], sorted_row_mask_indices, axis=0)
+                # copy the sorted pixels into the output image using the mask
+                pixel_sorted_image[i, strip_start:strip_end, channel] = sorted_pixels
+
 
     return pixel_sorted_image
 
-def threshhold_mask(image, threshhold):
-    mask = threshhold > 128
-
+def threshhold_mask(image, threshold):
     threshholded_image = np.zeros_like(image)
-    threshholded_image[mask] = 255
+    threshholded_image[image > threshold] = True
 
-    return color.rgb2gray(threshholded_image)
+    return color.rgb2gray(threshholded_image).astype(bool)
 
 def contour_mask(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -56,8 +73,8 @@ def contour_mask(image):
     return mask, contoured_image
 
 def main():
-    image = plt.imread("../images/cloud.jpg")
-    mask_t = threshhold_mask(np.copy(image), 200)
+    image = plt.imread("../images/man.jpg")
+    mask_t = threshhold_mask(np.copy(image), 128)
     mask_c, _ = contour_mask(np.copy(image))
 
     hue_sorted_image_contour = pixel_sort(image, mask_c, "HUE")
