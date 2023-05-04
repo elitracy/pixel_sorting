@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from skimage import color, io
+from skimage import color
 import cv2
 import random
 import os
