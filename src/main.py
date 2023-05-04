@@ -2,8 +2,54 @@ import matplotlib.pyplot as plt
 import numpy as np
 from skimage import color, io
 import cv2
+import random
+import os
 
-def pixel_sort(image, mask, sort_property="HUE"):
+def random_pixel_sort(image, mask, min_strip_length: int, max_strip_length: int, sort_property="HUE"):
+    _, HEIGHT, _ = image.shape
+
+    assert(max_strip_length < HEIGHT)
+    assert(min_strip_length >= 0)
+
+    hsv = 0
+
+    match sort_property:
+        case "HUE":
+            hsv = 0
+        case "SAT":
+            hsv = 1
+        case "VAL":
+            hsv = 2
+        case _:
+            hsv = 0
+
+    mask = mask.astype(bool)
+    rows, _ = np.where(mask)
+    mask_top, mask_bottom = rows.min(), rows.max()
+
+    pixel_sorted_image = np.copy(image)
+    hsv_image = color.rgb2hsv(pixel_sorted_image)[:,:,hsv]
+
+    for i in range(mask_top, mask_bottom+1):
+        strip_length =  random.randint(min_strip_length, max_strip_length)
+
+        mask_indices = np.where(mask[i])[0]
+
+        if mask_indices.size > 0:
+            strip_start = mask_indices[0]
+            strip_end = strip_start + strip_length
+            if strip_end > HEIGHT:
+                strip_end = HEIGHT-1
+                strip_start = strip_end - strip_length
+
+            sorted_indices = np.argsort(hsv_image[i,strip_start:strip_end])
+
+            # copy the sorted pixels into the output image using the mask
+            pixel_sorted_image[i, strip_start:strip_end] = pixel_sorted_image[i, sorted_indices] 
+
+    return pixel_sorted_image
+
+def smart_pixel_sort(image, mask, sort_property="HUE"):
     hsv = 0
 
     match sort_property:
@@ -27,12 +73,11 @@ def pixel_sort(image, mask, sort_property="HUE"):
 
     for channel in range(CHANNELS):
         for i in range(WIDTH):
+
             # find sort masked regions
             sorted_row_mask_indices = np.sort(np.where(masked_image.mask[i]))[0]
 
             if sorted_row_mask_indices.size > 1:
-
-
                 # get original masked image pixels
                 row = pixel_sorted_image[i,:,channel] 
 
@@ -43,9 +88,6 @@ def pixel_sort(image, mask, sort_property="HUE"):
                 strip_length = sorted_row_mask_indices.size
                 strip_end = strip_start+strip_length
 
-
-                # sort the masked region of the image by the indices of the sorted mask 
-                # sorted_masked_row = np.take_along_axis(row[strip_start:strip_end], sorted_row_mask_indices, axis=0)
                 # copy the sorted pixels into the output image using the mask
                 pixel_sorted_image[i, strip_start:strip_end, channel] = sorted_pixels
 
@@ -73,32 +115,65 @@ def contour_mask(image):
     return mask, contoured_image
 
 def main():
-    image = plt.imread("../images/man.jpg")
-    mask_t = threshhold_mask(np.copy(image), 128)
-    mask_c, _ = contour_mask(np.copy(image))
 
-    hue_sorted_image_contour = pixel_sort(image, mask_c, "HUE")
-    luminance_sorted_image_contour = pixel_sort(image, mask_c, "VAL")
-    saturation_sorted_image_contour = pixel_sort(image, mask_c, "SAT")
+    image_name = 'space'
+    file_path = '../images/' + image_name + '.jpg'
+    image = plt.imread(file_path)
+
+    output_path = '../results/' + image_name + "/"
+    if not os.path.exists(output_path):
+        os.makedirs('../results/' + image_name + "/")
+
+
+    _, HEIGHT, _ = image.shape
+
+    MIN_SORT_LENGTH = int(HEIGHT * 1/8)
+    MAX_SORT_LENGTH = int(HEIGHT * 1/4)
+    THRESHOLD = 128
     
-    hue_sorted_image_threshhold = pixel_sort(image, mask_t, "HUE")
-    luminance_sorted_image_threshhold = pixel_sort(image, mask_t, "VAL")
-    saturation_sorted_image_threshhold = pixel_sort(image, mask_t, "SAT")
-        
-    io.imshow_collection([
-                            image,
-                            mask_c,
-                            mask_t,
-                                
-                            hue_sorted_image_contour,
-                            saturation_sorted_image_contour,
-                            luminance_sorted_image_contour,
 
-                            hue_sorted_image_threshhold,
-                            luminance_sorted_image_threshhold,
-                            saturation_sorted_image_threshhold
-                        ])
-    io.show()
+    t_mask  = threshhold_mask(np.copy(image), THRESHOLD)
+    c_mask, c_mask_layer = contour_mask(np.copy(image))
+
+    plt.imsave(output_path+"threshold_mask_"+image_name+".jpg", t_mask, cmap='gray')
+    plt.imsave(output_path+"contour_mask_"+image_name+".jpg", c_mask_layer)
+
+
+    # =================== RANDOM SORT | CONTOUR ===================
+    hue_random_sorted_image_contour = random_pixel_sort(image, c_mask, MIN_SORT_LENGTH, MAX_SORT_LENGTH, "HUE")
+    value_random_sorted_image_contour = random_pixel_sort(image, c_mask, MIN_SORT_LENGTH, MAX_SORT_LENGTH, "VAL")
+    saturation_random_sorted_image_contour = random_pixel_sort(image, c_mask, MIN_SORT_LENGTH, MAX_SORT_LENGTH , "SAT")
+
+    plt.imsave(output_path+"hue_random_contour_"+image_name+".jpg", hue_random_sorted_image_contour)
+    plt.imsave(output_path+"value_random_contour_"+image_name+".jpg",value_random_sorted_image_contour)
+    plt.imsave(output_path+"satuation_random_contour_"+image_name+".jpg",saturation_random_sorted_image_contour)
+     
+    # =================== RANDOM SORT | THRESHOLD ===================
+    hue_random_sorted_image_threshhold = random_pixel_sort(image, t_mask, MIN_SORT_LENGTH, MAX_SORT_LENGTH, "HUE")
+    value_random_sorted_image_threshold = random_pixel_sort(image, t_mask, MIN_SORT_LENGTH, MAX_SORT_LENGTH, "VAL")
+    saturation_random_sorted_image_threshold = random_pixel_sort(image, t_mask, MIN_SORT_LENGTH, MAX_SORT_LENGTH , "SAT")
+
+    plt.imsave(output_path+"hue_random_threshold_"+image_name+".jpg",hue_random_sorted_image_threshhold)
+    plt.imsave(output_path+"value_random_threshold_"+image_name+".jpg",value_random_sorted_image_threshold)
+    plt.imsave(output_path+"saturation_random_threshold_"+image_name+".jpg",saturation_random_sorted_image_threshold)
+
+    # =================== SMART SORT | CONTOUR ===================
+    hue_smart_sorted_image_contour = smart_pixel_sort(image, c_mask, "HUE")
+    value_smart_sorted_image_contour = smart_pixel_sort(image, c_mask, "VAL")
+    saturation_smart_sorted_image_contour = smart_pixel_sort(image, c_mask, "SAT")
+
+    plt.imsave(output_path+"hue_smart_contour_"+image_name+".jpg",hue_smart_sorted_image_contour)
+    plt.imsave(output_path+"value_smart_contour_"+image_name+".jpg",value_smart_sorted_image_contour)
+    plt.imsave(output_path+"saturation_smart_contour_"+image_name+".jpg",saturation_smart_sorted_image_contour)
+     
+    # =================== SMART SORT | THRESHOLD ===================
+    hue_smart_sorted_image_threshhold = smart_pixel_sort(image, t_mask, "HUE")
+    value_smart_sorted_image_threshold = smart_pixel_sort(image, t_mask, "VAL")
+    saturation_smart_sorted_image_threshold = smart_pixel_sort(image, t_mask, "SAT")
+
+    plt.imsave(output_path+"hue_smart_threshold_"+image_name+".jpg",hue_smart_sorted_image_threshhold)
+    plt.imsave(output_path+"value_smart_threshold_"+image_name+".jpg",value_smart_sorted_image_threshold)
+    plt.imsave(output_path+"saturation_smart_threshold_"+image_name+".jpg",saturation_smart_sorted_image_threshold)
 
 if __name__ == "__main__":
     main()
