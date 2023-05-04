@@ -6,12 +6,16 @@ import cv2
 def pixel_sort(image, mask, sort_property="HUE"):
 
     hsv = 0
-    if sort_property == "HUE":
-        hsv = 0
-    elif sort_property == "SAT":
-        hsv = 1
-    elif sort_property == "VAL":
-        hsv = 2
+
+    match sort_property:
+        case "HUE":
+            hsv = 0
+        case "SAT":
+            hsv = 1
+        case "VAL":
+            hsv = 2
+        case _:
+            hsv = 0
 
     x = color.rgb2hsv(image/255.)[:,:,hsv]
 
@@ -44,8 +48,9 @@ def contour_mask(image):
     contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
 
     mask = np.zeros_like(gray)
-    mask = cv2.drawContours(mask,contours, -1, (255), 10) 
-    contoured_image = cv2.drawContours(image,contours, -1, (255), 10)
+    mask = cv2.drawContours(mask,contours, -1, (255), thickness=cv2.FILLED) 
+    contoured_image = cv2.drawContours(image,contours, -1, (255), thickness=cv2.FILLED)
+    plt.imshow(contoured_image)
 
     return mask, contoured_image
 
